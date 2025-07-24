@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,27 +57,63 @@ class PdfListScreen extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.all(8.0),
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 0.7,
-            crossAxisSpacing: 8.0,
-            mainAxisSpacing: 8.0,
-          ),
-          itemCount: pdfAssets.length,
-          itemBuilder: (context, index) {
-            final pdfPath = pdfAssets[index];
-            final fileName = pdfPath.split('/').last;
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Calculate responsive grid parameters
+            final screenWidth = constraints.maxWidth;
+            int crossAxisCount;
+            double maxItemWidth;
             
-            return PdfThumbnailCard(
-              pdfPath: pdfPath,
-              fileName: fileName,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => PdfViewerScreen(pdfPath: pdfPath),
-                  ),
+            if (screenWidth > 1200) {
+              // Large screens (desktop): 4 columns, max width 300px
+              crossAxisCount = 4;
+              maxItemWidth = 300.0;
+            } else if (screenWidth > 800) {
+              // Medium screens (tablet landscape): 3 columns, max width 350px
+              crossAxisCount = 3;
+              maxItemWidth = 350.0;
+            } else if (screenWidth > 600) {
+              // Small tablets: 2 columns, max width 400px
+              crossAxisCount = 2;
+              maxItemWidth = 400.0;
+            } else {
+              // Mobile: 2 columns, no max width restriction
+              crossAxisCount = 2;
+              maxItemWidth = double.infinity;
+            }
+            
+            // Calculate actual item width and adjust cross axis count if needed
+            double itemWidth = (screenWidth - (crossAxisCount + 1) * 8.0) / crossAxisCount;
+            
+            // If item width exceeds max width on large screens, increase column count
+            if (maxItemWidth != double.infinity && itemWidth > maxItemWidth) {
+              crossAxisCount = ((screenWidth - 8.0) / (maxItemWidth + 8.0)).floor();
+              crossAxisCount = crossAxisCount.clamp(2, 6); // Ensure reasonable bounds
+            }
+            
+            return GridView.builder(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                childAspectRatio: 0.7,
+                crossAxisSpacing: 8.0,
+                mainAxisSpacing: 8.0,
+              ),
+              itemCount: pdfAssets.length,
+              itemBuilder: (context, index) {
+                final pdfPath = pdfAssets[index];
+                final fileName = pdfPath.split('/').last;
+                
+                return PdfThumbnailCard(
+                  pdfPath: pdfPath,
+                  fileName: fileName,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => PdfViewerScreen(pdfPath: pdfPath),
+                      ),
+                    );
+                  },
                 );
               },
             );
@@ -460,6 +497,25 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     _loadTotalPages();
   }
 
+  // Custom layout function for horizontal page ordering
+  static PdfPageLayout _layoutPagesHorizontally(List<PdfPage> pages, PdfViewerParams params) {
+    final height = pages.fold(0.0, (prev, page) => max(prev, page.height)) + params.margin * 2;
+    final pageLayouts = <Rect>[];
+    double x = params.margin;
+    for (final page in pages) {
+      pageLayouts.add(
+        Rect.fromLTWH(
+          x,
+          (height - page.height) / 2, // center vertically
+          page.width,
+          page.height,
+        ),
+      );
+      x += page.width + params.margin;
+    }
+    return PdfPageLayout(pageLayouts: pageLayouts, documentSize: Size(x, height));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -536,6 +592,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                   child: PdfViewer.asset(
                     widget.pdfPath,
                     controller: controller,
+                    params: const PdfViewerParams(
+                      layoutPages: _layoutPagesHorizontally,
+                    ),
                   ),
                 ),
               ],
