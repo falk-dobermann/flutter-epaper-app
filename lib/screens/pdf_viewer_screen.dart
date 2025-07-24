@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
@@ -22,12 +23,16 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   bool showOutline = false;
   int currentPage = 1;
   int totalPages = 0;
+  double zoomLevel = 1.0;
+  static const double minZoom = 0.5;
+  static const double maxZoom = 5.0;
 
   @override
   void initState() {
     super.initState();
     controller = PdfViewerController();
     controller.addListener(_onPageChanged);
+    controller.addListener(_onZoomChanged);
     _loadTotalPages();
   }
 
@@ -57,6 +62,27 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         title: Text(widget.pdfAsset.formattedTitle),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          // Zoom controls
+          IconButton(
+            icon: const Icon(Icons.zoom_out),
+            onPressed: zoomLevel > minZoom ? _zoomOut : null,
+            tooltip: 'Zoom Out',
+          ),
+          Text(
+            '${(zoomLevel * 100).round()}%',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_in),
+            onPressed: zoomLevel < maxZoom ? _zoomIn : null,
+            tooltip: 'Zoom In',
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_out_map),
+            onPressed: _resetZoom,
+            tooltip: 'Reset Zoom',
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: Icon(showThumbnails ? Icons.view_list : Icons.view_module),
             onPressed: () {
@@ -129,13 +155,29 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                             onPageTap: _goToPage,
                           ),
                   ),
-                // Main PDF viewer
+                // Main PDF viewer with zoom support
                 Expanded(
-                  child: PdfViewer.asset(
-                    widget.pdfAsset.path,
-                    controller: controller,
-                    params: const PdfViewerParams(
-                      layoutPages: _layoutPagesHorizontally,
+                  child: Listener(
+                    onPointerSignal: (pointerSignal) {
+                      if (pointerSignal is PointerScrollEvent) {
+                        _handleMouseWheelZoom(pointerSignal);
+                      }
+                    },
+                    child: GestureDetector(
+                      onDoubleTap: _handleDoubleTapZoom,
+                      onTap: _handleSingleTap,
+                      child: PdfViewer.asset(
+                        widget.pdfAsset.path,
+                        controller: controller,
+                        params: PdfViewerParams(
+                          layoutPages: _layoutPagesHorizontally,
+                          minScale: minZoom,
+                          maxScale: maxZoom,
+                          boundaryMargin: const EdgeInsets.all(80.0),
+                          panEnabled: true,
+                          scaleEnabled: true,
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -180,9 +222,74 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     controller.goToPage(pageNumber: pageNumber);
   }
 
+  // Zoom functionality methods
+  void _onZoomChanged() {
+    // Update zoom level from controller if available
+    setState(() {
+      // For now, we'll track zoom level manually since pdfrx doesn't expose current zoom
+      // The zoom level will be updated in the zoom methods
+    });
+  }
+
+  void _zoomIn() {
+    final double newZoom = (zoomLevel * 1.2).clamp(minZoom, maxZoom);
+    _setZoom(newZoom);
+  }
+
+  void _zoomOut() {
+    final double newZoom = (zoomLevel / 1.2).clamp(minZoom, maxZoom);
+    _setZoom(newZoom);
+  }
+
+  void _resetZoom() {
+    _setZoom(1.0);
+  }
+
+  void _setZoom(double zoom) {
+    setState(() {
+      zoomLevel = zoom;
+    });
+    // Use the pdfrx controller's zoom functionality
+    controller.setZoom(_centerPosition, zoom);
+  }
+
+  Offset get _centerPosition => controller.centerPosition;
+
+  void _handleMouseWheelZoom(PointerScrollEvent event) {
+    // Check if Ctrl key is pressed for zoom (common desktop pattern)
+    if (HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlLeft) ||
+        HardwareKeyboard.instance.logicalKeysPressed.contains(LogicalKeyboardKey.controlRight)) {
+      
+      final double zoomDelta = event.scrollDelta.dy > 0 ? 0.9 : 1.1;
+      final double newZoom = (zoomLevel * zoomDelta).clamp(minZoom, maxZoom);
+      _setZoom(newZoom);
+    }
+  }
+
+  void _handleDoubleTapZoom() {
+    // Double-tap to zoom in, or reset to fit if already zoomed in
+    if (zoomLevel <= 1.0) {
+      // If at normal zoom or less, zoom in to 2x
+      _setZoom(2.0);
+    } else if (zoomLevel < 3.0) {
+      // If between 1x and 3x, zoom to 3x
+      _setZoom(3.0);
+    } else {
+      // If already zoomed in significantly, reset to fit
+      _setZoom(1.0);
+    }
+  }
+
+  void _handleSingleTap() {
+    // Single tap can be used for other interactions if needed
+    // For now, we'll just ensure focus is on the viewer
+    // This helps with keyboard navigation
+  }
+
   @override
   void dispose() {
     controller.removeListener(_onPageChanged);
+    controller.removeListener(_onZoomChanged);
     super.dispose();
   }
 }
