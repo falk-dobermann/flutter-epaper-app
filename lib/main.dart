@@ -1,8 +1,25 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize pdfrx with platform-specific method
+  try {
+    if (kIsWeb) {
+      // Use Flutter-specific initialization for web
+      pdfrxFlutterInitialize();
+    } else {
+      // Use standard initialization for mobile/desktop
+      await pdfrxInitialize();
+    }
+  } catch (e) {
+    // Initialization might fail on some platforms, continue anyway
+    print('pdfrx initialization: $e');
+  }
+  
   runApp(const MyApp());
 }
 
@@ -27,7 +44,7 @@ class PdfListScreen extends StatelessWidget {
 
   final List<String> pdfAssets = const [
     'assets/pdf/cologne.pdf',
-    'assets/pdf/23-07-2025-Köln Rechtsrheinisch.pdf',
+    'assets/pdf/23-07-2025-Koeln-Rechtsrheinisch.pdf',
   ];
 
   @override
@@ -37,19 +54,23 @@ class PdfListScreen extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text('E-Paper PDF Viewer'),
       ),
-      body: ListView.builder(
-        itemCount: pdfAssets.length,
-        itemBuilder: (context, index) {
-          final pdfPath = pdfAssets[index];
-          final fileName = pdfPath.split('/').last;
-          
-          return Card(
-            margin: const EdgeInsets.all(8.0),
-            child: ListTile(
-              leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              title: Text(fileName),
-              subtitle: Text(pdfPath),
-              trailing: const Icon(Icons.arrow_forward_ios),
+      body: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.7,
+            crossAxisSpacing: 8.0,
+            mainAxisSpacing: 8.0,
+          ),
+          itemCount: pdfAssets.length,
+          itemBuilder: (context, index) {
+            final pdfPath = pdfAssets[index];
+            final fileName = pdfPath.split('/').last;
+            
+            return PdfThumbnailCard(
+              pdfPath: pdfPath,
+              fileName: fileName,
               onTap: () {
                 Navigator.push(
                   context,
@@ -58,11 +79,360 @@ class PdfListScreen extends StatelessWidget {
                   ),
                 );
               },
-            ),
-          );
-        },
+            );
+          },
+        ),
       ),
     );
+  }
+}
+
+class PdfThumbnailCard extends StatefulWidget {
+  final String pdfPath;
+  final String fileName;
+  final VoidCallback onTap;
+
+  const PdfThumbnailCard({
+    super.key,
+    required this.pdfPath,
+    required this.fileName,
+    required this.onTap,
+  });
+
+  @override
+  State<PdfThumbnailCard> createState() => _PdfThumbnailCardState();
+}
+
+class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerProviderStateMixin {
+  PdfDocument? _document;
+  bool _isLoading = true;
+  String? _error;
+  late AnimationController _animationController;
+  late Animation<double> _scaleAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.95,
+    ).animate(CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    ));
+    _loadPdfDocument();
+  }
+
+  Future<void> _loadPdfDocument() async {
+    try {
+      final bytes = await rootBundle.load(widget.pdfPath);
+      final document = await PdfDocument.openData(bytes.buffer.asUint8List());
+      if (mounted) {
+        setState(() {
+          _document = document;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading PDF ${widget.pdfPath}: $e');
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatFileName(String fileName) {
+    // Remove .pdf extension and format the name
+    String name = fileName.replaceAll('.pdf', '');
+    // Replace hyphens and underscores with spaces
+    name = name.replaceAll(RegExp(r'[-_]'), ' ');
+    // Capitalize first letter of each word
+    return name.split(' ').map((word) {
+      if (word.isEmpty) return word;
+      return word[0].toUpperCase() + word.substring(1).toLowerCase();
+    }).join(' ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _scaleAnimation,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 16,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Card(
+              elevation: 0,
+              margin: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: InkWell(
+                onTap: widget.onTap,
+                onTapDown: (_) => _animationController.forward(),
+                onTapUp: (_) => _animationController.reverse(),
+                onTapCancel: () => _animationController.reverse(),
+                borderRadius: BorderRadius.circular(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.grey[50]!,
+                              Colors.grey[100]!,
+                            ],
+                          ),
+                        ),
+                        child: Stack(
+                          children: [
+                            _buildThumbnail(),
+                            // Subtle overlay for better text readability
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.7),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.picture_as_pdf,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'PDF',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(12.0),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          top: BorderSide(
+                            color: Colors.grey[200]!,
+                            width: 1,
+                          ),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatFileName(widget.fileName),
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[800],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.description_outlined,
+                                size: 14,
+                                color: Colors.grey[500],
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  _document != null 
+                                      ? '${_document!.pages.length} pages'
+                                      : _isLoading 
+                                          ? 'Loading...'
+                                          : 'Error loading',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                              if (_document != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'Ready',
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.primary,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildThumbnail() {
+    if (_isLoading) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.grey[100],
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(strokeWidth: 2),
+              SizedBox(height: 8),
+              Text(
+                'Loading PDF...',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_error != null || _document == null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.red[50],
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 48,
+                color: Colors.red[300],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Failed to load PDF',
+                style: TextStyle(
+                  color: Colors.red[600],
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: const BoxDecoration(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(16),
+          topRight: Radius.circular(16),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: PdfPageView(
+            document: _document!,
+            pageNumber: 1,
+            alignment: Alignment.center,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    _document?.dispose();
+    super.dispose();
   }
 }
 
@@ -200,24 +570,78 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                     padding: const EdgeInsets.all(8.0),
                     child: Row(
                       children: [
-                        // Thumbnail placeholder
+                        // Actual PDF page thumbnail
                         Container(
                           width: 80,
                           height: 100,
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
+                            border: Border.all(
+                              color: currentPage == pageNumber 
+                                  ? Theme.of(context).colorScheme.primary 
+                                  : Colors.grey,
+                              width: currentPage == pageNumber ? 2 : 1,
+                            ),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: Container(
-                            alignment: Alignment.center,
-                            child: Text(
-                              '$pageNumber',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.grey,
-                              ),
-                            ),
+                          child: FutureBuilder<PdfDocument?>(
+                            future: _loadPdfDocument(),
+                            builder: (context, snapshot) {
+                              if (snapshot.connectionState == ConnectionState.waiting ||
+                                  !snapshot.hasData) {
+                                return Container(
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    '$pageNumber',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                );
+                              }
+
+                              return Stack(
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(3),
+                                    child: Container(
+                                      width: double.infinity,
+                                      height: double.infinity,
+                                      color: Colors.white,
+                                      child: PdfPageView(
+                                        document: snapshot.data!,
+                                        pageNumber: pageNumber,
+                                        alignment: Alignment.center,
+                                      ),
+                                    ),
+                                  ),
+                                  if (currentPage == pageNumber)
+                                    Positioned(
+                                      top: 2,
+                                      right: 2,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Theme.of(context).colorScheme.primary,
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          'Current',
+                                          style: TextStyle(
+                                            color: Theme.of(context).colorScheme.onPrimary,
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -356,6 +780,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       final bytes = await rootBundle.load(widget.pdfPath);
       return await PdfDocument.openData(bytes.buffer.asUint8List());
     } catch (e) {
+      print('Error loading PDF ${widget.pdfPath}: $e');
       return null;
     }
   }
