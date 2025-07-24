@@ -1,5 +1,5 @@
 import 'dart:math';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -123,7 +123,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
           // Page counter
           Container(
             padding: const EdgeInsets.all(8.0),
-            color: Theme.of(context).colorScheme.surfaceVariant,
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -227,7 +227,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         _calculateFitToScreenScale();
       });
     } catch (e) {
-      print('Error loading PDF ${widget.pdfAsset.id}: $e');
+      if (kDebugMode) {
+        debugPrint('Error loading PDF ${widget.pdfAsset.id}: $e');
+      }
       setState(() {
         isLoading = false;
       });
@@ -288,7 +290,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
         final double actualScale = _fitToScreenScale * zoom;
         controller.setZoom(_centerPosition, actualScale);
       } catch (e) {
-        print('Error setting zoom: $e');
+        if (kDebugMode) {
+          debugPrint('Error setting zoom: $e');
+        }
         // Fallback: just update the zoom level in state
       }
     }
@@ -298,7 +302,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     try {
       // Check if controller has a valid state by accessing a property
       // Also ensure we have PDF data loaded
-      return controller.value != null && pdfData != null && !isLoading;
+      return pdfData != null && !isLoading;
     } catch (e) {
       return false;
     }
@@ -309,7 +313,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       try {
         return controller.centerPosition;
       } catch (e) {
-        print('Error getting center position: $e');
+        if (kDebugMode) {
+          debugPrint('Error getting center position: $e');
+        }
         // Return a default center position
         return const Offset(0.5, 0.5);
       }
@@ -330,7 +336,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   void _handleDoubleTapZoom() {
-    print('Double tap detected, current zoom: $zoomLevel');
+    if (kDebugMode) {
+      debugPrint('Double tap detected, current zoom: $zoomLevel');
+    }
     if (!_isControllerReady) return;
     
     // Double-tap to zoom in, or reset to fit if already zoomed in
@@ -362,6 +370,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       
       // Get the first page to calculate dimensions
       final firstPage = document.pages.first;
+      
+      // Check if widget is still mounted before using context
+      if (!mounted) return;
       
       // Get the available screen size (excluding app bar and page counter)
       final screenSize = MediaQuery.of(context).size;
@@ -401,7 +412,9 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       }
       
     } catch (e) {
-      print('Error calculating fit-to-screen scale: $e');
+      if (kDebugMode) {
+        debugPrint('Error calculating fit-to-screen scale: $e');
+      }
       // Fallback to default scale
       setState(() {
         _fitToScreenScale = 1.0;

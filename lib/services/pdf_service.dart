@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/environment.dart';
 import '../models/pdf_asset.dart';
@@ -31,8 +31,8 @@ class PdfService {
         throw Exception('Failed to load PDF list: ${response.statusCode}');
       }
     } catch (e) {
-      if (Environment.enableLogging) {
-        print('Error fetching PDF list: $e');
+      if (Environment.enableLogging && kDebugMode) {
+        debugPrint('Error fetching PDF list: $e');
       }
       // Fallback to mock data in case of error
       return _getMockPdfList();
@@ -44,8 +44,8 @@ class PdfService {
     try {
       // Check cache first
       if (Environment.enableCaching && _cache.containsKey(pdfId)) {
-        if (Environment.enableLogging) {
-          print('Loading PDF from cache: $pdfId');
+        if (Environment.enableLogging && kDebugMode) {
+          debugPrint('Loading PDF from cache: $pdfId');
         }
         return _cache[pdfId]!;
       }
@@ -70,8 +70,8 @@ class PdfService {
           _manageCacheSize();
         }
 
-        if (Environment.enableLogging) {
-          print('Downloaded PDF: $pdfId (${pdfData.length} bytes)');
+        if (Environment.enableLogging && kDebugMode) {
+          debugPrint('Downloaded PDF: $pdfId (${pdfData.length} bytes)');
         }
 
         return pdfData;
@@ -79,8 +79,8 @@ class PdfService {
         throw Exception('Failed to download PDF: ${response.statusCode}');
       }
     } catch (e) {
-      if (Environment.enableLogging) {
-        print('Error downloading PDF $pdfId: $e');
+      if (Environment.enableLogging && kDebugMode) {
+        debugPrint('Error downloading PDF $pdfId: $e');
       }
       // Fallback to mock data
       return await _getMockPdfData(pdfId);
@@ -105,8 +105,8 @@ class PdfService {
         throw Exception('Failed to load PDF metadata: ${response.statusCode}');
       }
     } catch (e) {
-      if (Environment.enableLogging) {
-        print('Error fetching PDF metadata for $pdfId: $e');
+      if (Environment.enableLogging && kDebugMode) {
+        debugPrint('Error fetching PDF metadata for $pdfId: $e');
       }
       return _getMockPdfMetadata(pdfId);
     }
@@ -115,8 +115,8 @@ class PdfService {
   /// Clear PDF cache
   void clearCache() {
     _cache.clear();
-    if (Environment.enableLogging) {
-      print('PDF cache cleared');
+    if (Environment.enableLogging && kDebugMode) {
+      debugPrint('PDF cache cleared');
     }
   }
 
@@ -131,8 +131,8 @@ class PdfService {
       // Remove oldest entry (simple FIFO strategy)
       final firstKey = _cache.keys.first;
       _cache.remove(firstKey);
-      if (Environment.enableLogging) {
-        print('Removed $firstKey from cache due to size limit');
+      if (Environment.enableLogging && kDebugMode) {
+        debugPrint('Removed $firstKey from cache due to size limit');
       }
     }
   }
@@ -171,8 +171,8 @@ class PdfService {
       // For now, return empty data
       return Uint8List(0);
     } catch (e) {
-      if (Environment.enableLogging) {
-        print('Could not load mock PDF data for $pdfId: $e');
+      if (Environment.enableLogging && kDebugMode) {
+        debugPrint('Could not load mock PDF data for $pdfId: $e');
       }
       return Uint8List(0);
     }

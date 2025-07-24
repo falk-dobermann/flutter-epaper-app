@@ -18,7 +18,9 @@ void main() async {
     }
   } catch (e) {
     // Initialization might fail on some platforms, continue anyway
-    print('pdfrx initialization: $e');
+    if (kDebugMode) {
+      debugPrint('pdfrx initialization: $e');
+    }
   }
   
   runApp(const MyApp());

@@ -1,5 +1,5 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../models/pdf_asset.dart';
@@ -167,7 +167,9 @@ class PdfThumbnailPanel extends StatelessWidget {
       // Thumbnails will be handled differently in the API approach
       return null;
     } catch (e) {
-      print('Error loading PDF ${pdfAsset.id}: $e');
+      if (kDebugMode) {
+        debugPrint('Error loading PDF ${pdfAsset.id}: $e');
+      }
       return null;
     }
   }

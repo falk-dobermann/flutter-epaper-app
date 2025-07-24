@@ -1,10 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/pdf_asset.dart';
-import '../services/pdf_service.dart';
 import '../config/environment.dart';
 
 class PdfThumbnailCard extends StatefulWidget {
@@ -55,7 +53,9 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
         });
       }
     } catch (e) {
-      print('Error loading PDF ${widget.pdfAsset.id}: $e');
+      if (kDebugMode) {
+        debugPrint('Error loading PDF ${widget.pdfAsset.id}: $e');
+      }
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -77,12 +77,12 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 16,
                   offset: const Offset(0, 8),
                 ),
@@ -130,7 +130,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.7),
+                                  color: Colors.black.withValues(alpha: 0.7),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Row(
@@ -211,7 +211,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                                     vertical: 2,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
@@ -352,8 +352,8 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
                   ],
                 ),
               ),
@@ -389,8 +389,8 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
                   ],
                 ),
               ),
@@ -401,7 +401,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                     Icon(
                       Icons.picture_as_pdf,
                       size: 48,
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.7),
                     ),
                     const SizedBox(height: 8),
                     Text(
