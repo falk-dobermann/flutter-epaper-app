@@ -33,3 +33,9 @@ Project-specific guidelines for Flutter e-paper application development, focusin
 - Ensure all assets are properly declared in pubspec.yaml under flutter/assets
 - Consider file size optimization for mobile deployment
 - Implement proper error handling for missing or corrupted PDF files
+
+## CICD
+- Builds and deployments are based on GitHub workflows
+- For web deployments, Google Cloud Run is used
+- Pull Requests are build for previewing new features (by preview cloud run instances (web) or by creating artifacts (apps))
+- GitHub Releases are used for live deployments

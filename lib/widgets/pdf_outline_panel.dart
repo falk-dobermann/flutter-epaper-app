@@ -104,10 +104,11 @@ class PdfOutlinePanel extends StatelessWidget {
 
   Future<PdfDocument?> _loadPdfDocument() async {
     try {
-      final bytes = await rootBundle.load(pdfAsset.path);
-      return await PdfDocument.openData(bytes.buffer.asUint8List());
+      // For now, return null since we're using API-based loading
+      // Outline will be handled differently in the API approach
+      return null;
     } catch (e) {
-      print('Error loading PDF ${pdfAsset.path}: $e');
+      print('Error loading PDF ${pdfAsset.id}: $e');
       return null;
     }
   }

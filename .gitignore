@@ -89,7 +89,6 @@ coverage/
 !**/ios/**/default.perspectivev3
 
 # Web related
-lib/generated_plugin_registrant.dart
 
 # Windows
 **/windows/flutter/generated_plugin_registrant.cc
@@ -122,3 +121,5 @@ coverage/lcov.info
 # Temporary files
 *.tmp
 *.temp
+
+**/node_modules/** 

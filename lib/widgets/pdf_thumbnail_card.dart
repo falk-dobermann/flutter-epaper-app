@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../models/pdf_asset.dart';
+import '../services/pdf_service.dart';
+import '../config/environment.dart';
 
 class PdfThumbnailCard extends StatefulWidget {
   final PdfAsset pdfAsset;
@@ -44,16 +47,15 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
 
   Future<void> _loadPdfDocument() async {
     try {
-      final bytes = await rootBundle.load(widget.pdfAsset.path);
-      final document = await PdfDocument.openData(bytes.buffer.asUint8List());
+      // For thumbnails, we don't need to load the full PDF
+      // The server will generate thumbnails for us
       if (mounted) {
         setState(() {
-          _document = document;
           _isLoading = false;
         });
       }
     } catch (e) {
-      print('Error loading PDF ${widget.pdfAsset.path}: $e');
+      print('Error loading PDF ${widget.pdfAsset.id}: $e');
       if (mounted) {
         setState(() {
           _error = e.toString();
@@ -191,18 +193,18 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
-                                  _document != null 
-                                      ? '${_document!.pages.length} pages'
-                                      : _isLoading 
-                                          ? 'Loading...'
-                                          : 'Error loading',
+                                  _isLoading 
+                                      ? 'Loading...'
+                                      : _error != null
+                                          ? 'Error loading'
+                                          : '${widget.pdfAsset.pageCount} pages • ${widget.pdfAsset.formattedFileSize}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.grey[600],
                                     fontSize: 11,
                                   ),
                                 ),
                               ),
-                              if (_document != null)
+                              if (!_isLoading && _error == null)
                                 Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 6,
@@ -253,7 +255,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
               CircularProgressIndicator(strokeWidth: 2),
               SizedBox(height: 8),
               Text(
-                'Loading PDF...',
+                'Loading...',
                 style: TextStyle(
                   color: Colors.grey,
                   fontSize: 12,
@@ -265,7 +267,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
       );
     }
 
-    if (_error != null || _document == null) {
+    if (_error != null) {
       return Container(
         decoration: BoxDecoration(
           color: Colors.red[50],
@@ -285,7 +287,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
               ),
               const SizedBox(height: 8),
               Text(
-                'Failed to load PDF',
+                'Failed to load',
                 style: TextStyle(
                   color: Colors.red[600],
                   fontSize: 12,
@@ -299,9 +301,35 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
       );
     }
 
+    // Show actual PDF thumbnail if document is loaded
+    if (_document != null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+          ),
+          child: PdfPageView(
+            document: _document!,
+            pageNumber: 1, // Show first page as thumbnail
+            alignment: Alignment.center,
+          ),
+        ),
+      );
+    }
+
+    // Show server-generated thumbnail
     return Container(
-      decoration: const BoxDecoration(
-        borderRadius: BorderRadius.only(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(16),
           topRight: Radius.circular(16),
         ),
@@ -311,21 +339,95 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
           topLeft: Radius.circular(16),
           topRight: Radius.circular(16),
         ),
-        child: Container(
-          decoration: BoxDecoration(
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
+        child: Image.network(
+          '${Environment.apiBaseUrl}/api/pdfs/${widget.pdfAsset.id}/thumbnail',
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                  ],
+                ),
               ),
-            ],
-          ),
-          child: PdfPageView(
-            document: _document!,
-            pageNumber: 1,
-            alignment: Alignment.center,
-          ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(
+                      strokeWidth: 2,
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Loading thumbnail...',
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    Theme.of(context).colorScheme.primary.withOpacity(0.05),
+                  ],
+                ),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.picture_as_pdf,
+                      size: 48,
+                      color: Theme.of(context).colorScheme.primary.withOpacity(0.7),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.pdfAsset.formattedTitle,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.pdfAsset.formattedDate,
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
