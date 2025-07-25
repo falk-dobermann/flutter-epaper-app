@@ -19,10 +19,14 @@ class PdfViewerScreen extends StatefulWidget {
   State<PdfViewerScreen> createState() => _PdfViewerScreenState();
 }
 
-class _PdfViewerScreenState extends State<PdfViewerScreen> {
+class _PdfViewerScreenState extends State<PdfViewerScreen>
+    with TickerProviderStateMixin {
   late PdfViewerController controller;
+  late AnimationController _toolbarAnimationController;
+  late Animation<double> _toolbarAnimation;
   bool showThumbnails = false;
   bool showOutline = false;
+  bool _isToolbarVisible = true;
   int currentPage = 1;
   int totalPages = 0;
   double zoomLevel = 1.0;
@@ -38,6 +42,20 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     controller = PdfViewerController();
     controller.addListener(_onPageChanged);
     controller.addListener(_onZoomChanged);
+    
+    // Initialize animation controller for toolbar visibility
+    _toolbarAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _toolbarAnimation = CurvedAnimation(
+      parent: _toolbarAnimationController,
+      curve: Curves.easeInOut,
+    );
+    
+    // Start with toolbar visible
+    _toolbarAnimationController.forward();
+    
     _loadPdfDocument();
   }
 
@@ -62,149 +80,203 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Calculate toolbar heights for proper positioning
+    final appBarHeight = AppBar().preferredSize.height;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
+    final pageCounterHeight = 56.0;
+    final toolbarTotalHeight = _isToolbarVisible 
+        ? appBarHeight + statusBarHeight + pageCounterHeight 
+        : 0.0;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.pdfAsset.formattedTitle),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          // Zoom controls
-          IconButton(
-            icon: const Icon(Icons.zoom_out),
-            onPressed: (zoomLevel > minZoom && _isControllerReady) ? _zoomOut : null,
-            tooltip: 'Zoom Out',
-          ),
-          Text(
-            '${(zoomLevel * 100).round()}%',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_in),
-            onPressed: (zoomLevel < maxZoom && _isControllerReady) ? _zoomIn : null,
-            tooltip: 'Zoom In',
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_out_map),
-            onPressed: _isControllerReady ? _resetZoom : null,
-            tooltip: 'Reset Zoom',
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: Icon(showThumbnails ? Icons.view_list : Icons.view_module),
-            onPressed: () {
-              setState(() {
-                showThumbnails = !showThumbnails;
-                showOutline = false;
-              });
-              // Recalculate fit-to-screen scale when panel visibility changes
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _calculateFitToScreenScale();
-              });
-            },
-            tooltip: 'Toggle Page Thumbnails',
-          ),
-          IconButton(
-            icon: Icon(showOutline ? Icons.list_alt : Icons.format_list_bulleted),
-            onPressed: () {
-              setState(() {
-                showOutline = !showOutline;
-                showThumbnails = false;
-              });
-              // Recalculate fit-to-screen scale when panel visibility changes
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                _calculateFitToScreenScale();
-              });
-            },
-            tooltip: 'Toggle Table of Contents',
-          ),
-        ],
-      ),
-      body: Column(
+      body: Stack(
         children: [
-          // Page counter
-          Container(
-            padding: const EdgeInsets.all(8.0),
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  onPressed: currentPage > 1 ? () => _goToPage(currentPage - 1) : null,
-                  icon: const Icon(Icons.navigate_before),
-                ),
-                Text(
-                  'Page $currentPage of $totalPages',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                IconButton(
-                  onPressed: currentPage < totalPages ? () => _goToPage(currentPage + 1) : null,
-                  icon: const Icon(Icons.navigate_next),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Row(
-              children: [
-                // Side panel for thumbnails or outline
-                if (showThumbnails || showOutline)
-                  Container(
-                    width: 250,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        right: BorderSide(
-                          color: Theme.of(context).dividerColor,
-                        ),
-                      ),
-                    ),
-                    child: showThumbnails
-                        ? PdfThumbnailPanel(
-                            pdfAsset: widget.pdfAsset,
-                            currentPage: currentPage,
-                            totalPages: totalPages,
-                            onPageTap: _goToPage,
-                          )
-                        : PdfOutlinePanel(
-                            pdfAsset: widget.pdfAsset,
-                            onPageTap: _goToPage,
-                          ),
-                  ),
-                // Main PDF viewer with zoom support
-                Expanded(
-                  child: isLoading
-                      ? const Center(child: CircularProgressIndicator())
-                      : pdfData == null
-                          ? const Center(child: Text('Failed to load PDF'))
-                          : Listener(
-                              onPointerSignal: (pointerSignal) {
-                                if (pointerSignal is PointerScrollEvent) {
-                                  _handleMouseWheelZoom(pointerSignal);
-                                }
-                              },
-                              child: GestureDetector(
-                                onDoubleTap: _handleDoubleTapZoom,
-                                onTap: _handleSingleTap,
-                                child: PdfViewer.data(
-                                  pdfData!,
-                                  sourceName: widget.pdfAsset.id,
-                                  controller: controller,
-                                  params: PdfViewerParams(
-                                    layoutPages: _layoutPagesHorizontally,
-                                    minScale: minZoom,
-                                    maxScale: maxZoom,
-                                    boundaryMargin: const EdgeInsets.all(80.0),
-                                    panEnabled: true,
-                                    scaleEnabled: true,
-                                    textSelectionParams: const PdfTextSelectionParams(
-                                      enabled: false,
-                                    ),
-                                  ),
-                                ),
+          // Main PDF viewer - positioned to avoid toolbar overlap
+          Positioned(
+            top: toolbarTotalHeight,
+            left: (showThumbnails || showOutline) && _isToolbarVisible ? 250.0 : 0.0,
+            right: 0,
+            bottom: 0,
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : pdfData == null
+                    ? const Center(child: Text('Failed to load PDF'))
+                    : Listener(
+                        onPointerSignal: (pointerSignal) {
+                          if (pointerSignal is PointerScrollEvent) {
+                            try {
+                              _handleMouseWheelZoom(pointerSignal);
+                            } catch (e) {
+                              // Silently handle Flutter 3.32.0 trackpad assertion bug
+                              // This allows trackpad scrolling to continue working
+                              if (kDebugMode) {
+                                debugPrint('Pointer event handled with fallback: $e');
+                              }
+                            }
+                          }
+                        },
+                        child: GestureDetector(
+                          onDoubleTap: _handleDoubleTapZoom,
+                          onTap: _toggleToolbarVisibility,
+                          child: PdfViewer.data(
+                            pdfData!,
+                            sourceName: widget.pdfAsset.id,
+                            controller: controller,
+                            params: PdfViewerParams(
+                              layoutPages: _layoutPagesHorizontally,
+                              minScale: minZoom,
+                              maxScale: maxZoom,
+                              boundaryMargin: EdgeInsets.all(_isToolbarVisible ? 80.0 : 20.0),
+                              panEnabled: true,
+                              scaleEnabled: true,
+                              textSelectionParams: const PdfTextSelectionParams(
+                                enabled: false,
                               ),
                             ),
-                ),
-              ],
-            ),
+                          ),
+                        ),
+                      ),
           ),
+          
+          // Animated AppBar - positioned at top, only visible when toolbar is visible
+          if (_isToolbarVisible)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -1),
+                  end: Offset.zero,
+                ).animate(_toolbarAnimation),
+                child: AppBar(
+                  title: Text(widget.pdfAsset.formattedTitle),
+                  backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+                  actions: [
+                    // Zoom controls
+                    IconButton(
+                      icon: const Icon(Icons.zoom_out),
+                      onPressed: (zoomLevel > minZoom && _isControllerReady) ? _zoomOut : null,
+                      tooltip: 'Zoom Out',
+                    ),
+                    Text(
+                      '${(zoomLevel * 100).round()}%',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.zoom_in),
+                      onPressed: (zoomLevel < maxZoom && _isControllerReady) ? _zoomIn : null,
+                      tooltip: 'Zoom In',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.zoom_out_map),
+                      onPressed: _isControllerReady ? _resetZoom : null,
+                      tooltip: 'Reset Zoom',
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(showThumbnails ? Icons.view_list : Icons.view_module),
+                      onPressed: () {
+                        setState(() {
+                          showThumbnails = !showThumbnails;
+                          showOutline = false;
+                        });
+                        // Recalculate fit-to-screen scale when panel visibility changes
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _calculateFitToScreenScale();
+                        });
+                      },
+                      tooltip: 'Toggle Page Thumbnails',
+                    ),
+                    IconButton(
+                      icon: Icon(showOutline ? Icons.list_alt : Icons.format_list_bulleted),
+                      onPressed: () {
+                        setState(() {
+                          showOutline = !showOutline;
+                          showThumbnails = false;
+                        });
+                        // Recalculate fit-to-screen scale when panel visibility changes
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _calculateFitToScreenScale();
+                        });
+                      },
+                      tooltip: 'Toggle Table of Contents',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          
+          // Animated Page counter - positioned below AppBar, only visible when toolbar is visible
+          if (_isToolbarVisible)
+            Positioned(
+              top: AppBar().preferredSize.height + MediaQuery.of(context).padding.top,
+              left: 0,
+              right: 0,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(0, -1),
+                  end: Offset.zero,
+                ).animate(_toolbarAnimation),
+                child: Container(
+                  padding: const EdgeInsets.all(8.0),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed: currentPage > 1 ? () => _goToPage(currentPage - 1) : null,
+                        icon: const Icon(Icons.navigate_before),
+                      ),
+                      Text(
+                        'Page $currentPage of $totalPages',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      IconButton(
+                        onPressed: currentPage < totalPages ? () => _goToPage(currentPage + 1) : null,
+                        icon: const Icon(Icons.navigate_next),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          
+          // Animated Side panel for thumbnails or outline
+          if (showThumbnails || showOutline)
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: const Offset(-1, 0),
+                  end: Offset.zero,
+                ).animate(_toolbarAnimation),
+                child: Container(
+                  width: 250,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      right: BorderSide(
+                        color: Theme.of(context).dividerColor,
+                      ),
+                    ),
+                  ),
+                  child: showThumbnails
+                      ? PdfThumbnailPanel(
+                          pdfAsset: widget.pdfAsset,
+                          currentPage: currentPage,
+                          totalPages: totalPages,
+                          onPageTap: _goToPage,
+                        )
+                      : PdfOutlinePanel(
+                          pdfAsset: widget.pdfAsset,
+                          onPageTap: _goToPage,
+                        ),
+                ),
+              ),
+            ),
+          
         ],
       ),
     );
@@ -354,10 +426,26 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
     }
   }
 
+  void _toggleToolbarVisibility() {
+    setState(() {
+      _isToolbarVisible = !_isToolbarVisible;
+    });
+    
+    if (_isToolbarVisible) {
+      _toolbarAnimationController.forward();
+    } else {
+      _toolbarAnimationController.reverse();
+    }
+    
+    // Recalculate fit-to-screen scale when toolbar visibility changes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _calculateFitToScreenScale();
+    });
+  }
+
   void _handleSingleTap() {
-    // Single tap can be used for other interactions if needed
-    // For now, we'll just ensure focus is on the viewer
-    // This helps with keyboard navigation
+    // Single tap toggles toolbar visibility for fullscreen viewing
+    _toggleToolbarVisibility();
   }
 
   void _calculateFitToScreenScale() async {
@@ -374,20 +462,25 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
       // Check if widget is still mounted before using context
       if (!mounted) return;
       
-      // Get the available screen size (excluding app bar and page counter)
+      // Get the available screen size
       final screenSize = MediaQuery.of(context).size;
-      final appBarHeight = AppBar().preferredSize.height;
-      final pageCounterHeight = 56.0; // Approximate height of page counter
-      double availableHeight = screenSize.height - appBarHeight - pageCounterHeight - MediaQuery.of(context).padding.top;
-      
-      // Calculate available width (excluding side panel if visible)
+      double availableHeight = screenSize.height;
       double availableWidth = screenSize.width;
-      if (showThumbnails || showOutline) {
-        availableWidth -= 250; // Side panel width
+      
+      // Adjust for toolbar visibility
+      if (_isToolbarVisible) {
+        final appBarHeight = AppBar().preferredSize.height;
+        final pageCounterHeight = 56.0; // Approximate height of page counter
+        availableHeight -= appBarHeight + pageCounterHeight + MediaQuery.of(context).padding.top;
+        
+        // Calculate available width (excluding side panel if visible)
+        if (showThumbnails || showOutline) {
+          availableWidth -= 250; // Side panel width
+        }
       }
       
-      // Account for margins
-      const margin = 80.0; // From boundaryMargin in PdfViewerParams
+      // Account for margins (smaller margins in fullscreen mode)
+      final margin = _isToolbarVisible ? 80.0 : 20.0;
       availableWidth -= margin * 2;
       availableHeight -= margin * 2;
       
@@ -426,6 +519,7 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   void dispose() {
     controller.removeListener(_onPageChanged);
     controller.removeListener(_onZoomChanged);
+    _toolbarAnimationController.dispose();
     super.dispose();
   }
 }
