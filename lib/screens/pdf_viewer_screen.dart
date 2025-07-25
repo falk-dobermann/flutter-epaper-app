@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../models/pdf_asset.dart';
+import '../models/epaper_metadata.dart';
 import '../services/pdf_service.dart';
 import '../widgets/pdf_thumbnail_panel.dart';
 import '../widgets/pdf_outline_panel.dart';
@@ -150,7 +151,64 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   end: Offset.zero,
                 ).animate(_toolbarAnimation),
                 child: AppBar(
-                  title: Text(widget.pdfAsset.formattedTitle),
+                  title: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (widget.pdfAsset.epaperMetadata != null) ...[
+                        Text(
+                          widget.pdfAsset.epaperMetadata!.brand,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Text(
+                              widget.pdfAsset.epaperMetadata!.region,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
+                                    ? Colors.blue.withValues(alpha: 0.3)
+                                    : Colors.orange.withValues(alpha: 0.3),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                widget.pdfAsset.epaperMetadata!.typeDisplayName,
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.pdfAsset.epaperMetadata!.formattedDate,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Colors.white.withValues(alpha: 0.9),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        Text(
+                          widget.pdfAsset.formattedTitle,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                   backgroundColor: Theme.of(context).colorScheme.inversePrimary,
                   actions: [
                     // Zoom controls

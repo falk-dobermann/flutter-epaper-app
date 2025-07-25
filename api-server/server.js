@@ -19,46 +19,97 @@ const THUMBNAIL_DIR = path.join(__dirname, 'thumbnails');
 // Ensure thumbnail directory exists
 fs.ensureDirSync(THUMBNAIL_DIR);
 
-// Mock PDF metadata database
-const pdfDatabase = [
-  {
-    id: 'cologne-2025-07-23',
-    title: 'Köln Rechtsrheinisch',
-    description: 'E-Paper vom 23.07.2025',
-    publishDate: '2025-07-23T00:00:00.000Z',
-    thumbnailUrl: null,
-    fileSize: 2048576,
-    pageCount: 36,
-    tags: ['Köln', 'Rechtsrheinisch', '2025'],
-    downloadUrl: `http://localhost:${PORT}/api/pdfs/cologne-2025-07-23/download`,
-    metadata: {
-      author: 'E-Paper System',
-      creationDate: '2025-07-23T08:00:00.000Z',
-      version: '1.0'
-    },
-    filename: '23-07-2025-Koeln-Rechtsrheinisch.pdf'
-  },
-  {
-    id: 'cologne-general',
-    title: 'Köln Allgemein',
-    description: 'Allgemeine Ausgabe Köln',
-    publishDate: '2025-07-20T00:00:00.000Z',
-    thumbnailUrl: null,
-    fileSize: 1843200,
-    pageCount: 36,
-    tags: ['Köln', 'Allgemein', '2025'],
-    downloadUrl: `http://localhost:${PORT}/api/pdfs/cologne-general/download`,
-    metadata: {
-      author: 'E-Paper System',
-      creationDate: '2025-07-20T08:00:00.000Z',
-      version: '1.0'
-    },
-    filename: 'cologne.pdf'
+// PDF database cache
+let pdfDatabaseCache = null;
+let pdfDatabaseCacheTime = null;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes in milliseconds
+
+// Function to scan filesystem and build PDF database
+async function buildPdfDatabase() {
+  try {
+    console.log('🔍 Scanning PDF directory for files...');
+    const files = await fs.readdir(PDF_DIR);
+    const pdfFiles = files.filter(file => file.toLowerCase().endsWith('.pdf'));
+    
+    const pdfDatabase = await Promise.all(
+      pdfFiles.map(async (filename) => {
+        const filePath = path.join(PDF_DIR, filename);
+        const stats = await fs.stat(filePath);
+        
+        // Generate ID from filename
+        const id = filename.replace('.pdf', '').toLowerCase()
+          .replace(/[^a-z0-9]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '');
+        
+        // Extract title from filename
+        const title = filename.replace('.pdf', '')
+          .replace(/^\d{2}-\d{2}-\d{4}-?/, '') // Remove date prefix
+          .replace(/[-_]/g, ' ')
+          .trim();
+        
+        // Try to extract date from filename
+        const dateMatch = filename.match(/(\d{2})-(\d{2})-(\d{4})/);
+        let publishDate = new Date().toISOString();
+        if (dateMatch) {
+          const [, day, month, year] = dateMatch;
+          publishDate = new Date(`${year}-${month}-${day}`).toISOString();
+        }
+        
+        return {
+          id,
+          title: title || filename.replace('.pdf', ''),
+          description: `E-Paper document: ${title || filename}`,
+          publishDate,
+          thumbnailUrl: null,
+          fileSize: stats.size,
+          pageCount: 36, // Default, could be extracted from PDF if needed
+          tags: title.split(' ').filter(tag => tag.length > 2),
+          downloadUrl: `http://localhost:${PORT}/api/pdfs/${id}/download`,
+          metadata: {
+            author: 'E-Paper System',
+            creationDate: stats.birthtime.toISOString(),
+            version: '1.0'
+          },
+          filename
+        };
+      })
+    );
+    
+    console.log(`✅ Found ${pdfDatabase.length} PDF files:`);
+    pdfDatabase.forEach(pdf => {
+      console.log(`   📄 ${pdf.filename} -> ID: ${pdf.id}`);
+    });
+    
+    return pdfDatabase;
+    
+  } catch (error) {
+    console.error('❌ Error building PDF database:', error);
+    return [];
   }
-];
+}
+
+// Function to get PDF database with caching
+async function getPdfDatabase() {
+  const now = Date.now();
+  
+  // Check if cache is valid
+  if (pdfDatabaseCache && pdfDatabaseCacheTime && (now - pdfDatabaseCacheTime) < CACHE_DURATION) {
+    console.log('📋 Using cached PDF database');
+    return pdfDatabaseCache;
+  }
+  
+  // Cache is expired or doesn't exist, rebuild
+  console.log('🔄 Rebuilding PDF database cache...');
+  pdfDatabaseCache = await buildPdfDatabase();
+  pdfDatabaseCacheTime = now;
+  
+  return pdfDatabaseCache;
+}
 
 // Helper function to get PDF file path
-function getPdfFilePath(pdfId) {
+async function getPdfFilePath(pdfId) {
+  const pdfDatabase = await getPdfDatabase();
   const pdf = pdfDatabase.find(p => p.id === pdfId);
   if (!pdf) return null;
   return path.join(PDF_DIR, pdf.filename);
@@ -71,6 +122,30 @@ async function getFileSize(filePath) {
     return stats.size;
   } catch (error) {
     return 0;
+  }
+}
+
+// Helper function to load epaper metadata
+async function loadEpaperMetadata(pdfId) {
+  try {
+    const pdfDatabase = await getPdfDatabase();
+    const pdf = pdfDatabase.find(p => p.id === pdfId);
+    if (!pdf) return null;
+    
+    // Try to load JSON metadata file with same name as PDF
+    const metadataPath = path.join(PDF_DIR, pdf.filename.replace('.pdf', '.json'));
+    
+    if (await fs.pathExists(metadataPath)) {
+      const metadataContent = await fs.readJson(metadataPath);
+      console.log(`📋 Loaded epaper metadata for: ${pdfId}`);
+      return metadataContent;
+    }
+    
+    console.log(`⚠️ No epaper metadata found for: ${pdfId}`);
+    return null;
+  } catch (error) {
+    console.error(`❌ Error loading epaper metadata for ${pdfId}:`, error);
+    return null;
   }
 }
 
@@ -157,15 +232,26 @@ app.get('/api/pdfs', async (req, res) => {
   try {
     console.log('📋 GET /api/pdfs - Fetching PDF list');
     
-    // Update file sizes from actual files
+    const pdfDatabase = await getPdfDatabase();
+    
+    // Update file sizes and load epaper metadata
     const updatedPdfs = await Promise.all(
       pdfDatabase.map(async (pdf) => {
-        const filePath = getPdfFilePath(pdf.id);
+        const filePath = await getPdfFilePath(pdf.id);
+        let updatedPdf = { ...pdf };
+        
         if (filePath && await fs.pathExists(filePath)) {
           const actualSize = await getFileSize(filePath);
-          return { ...pdf, fileSize: actualSize };
+          updatedPdf.fileSize = actualSize;
         }
-        return pdf;
+        
+        // Load epaper metadata if available
+        const epaperMetadata = await loadEpaperMetadata(pdf.id);
+        if (epaperMetadata) {
+          updatedPdf.epaperMetadata = epaperMetadata;
+        }
+        
+        return updatedPdf;
       })
     );
 
@@ -189,7 +275,7 @@ app.get('/api/pdfs/:id/download', async (req, res) => {
     const { id } = req.params;
     console.log(`📥 GET /api/pdfs/${id}/download - Downloading PDF`);
     
-    const filePath = getPdfFilePath(id);
+    const filePath = await getPdfFilePath(id);
     if (!filePath) {
       console.log(`❌ PDF not found: ${id}`);
       return res.status(404).json({
@@ -215,6 +301,7 @@ app.get('/api/pdfs/:id/download', async (req, res) => {
 
     // Get file stats
     const stats = await fs.stat(filePath);
+    const pdfDatabase = await getPdfDatabase();
     const pdf = pdfDatabase.find(p => p.id === id);
 
     // Set appropriate headers
@@ -255,11 +342,12 @@ app.get('/api/pdfs/:id/download', async (req, res) => {
 });
 
 // Get PDF metadata
-app.get('/api/pdfs/:id/metadata', (req, res) => {
+app.get('/api/pdfs/:id/metadata', async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`📊 GET /api/pdfs/${id}/metadata - Fetching metadata`);
     
+    const pdfDatabase = await getPdfDatabase();
     const pdf = pdfDatabase.find(p => p.id === id);
     if (!pdf) {
       console.log(`❌ PDF not found: ${id}`);
@@ -300,13 +388,58 @@ app.get('/api/pdfs/:id/metadata', (req, res) => {
   }
 });
 
+// Get epaper metadata
+app.get('/api/pdfs/:id/epaper-metadata', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`📰 GET /api/pdfs/${id}/epaper-metadata - Fetching epaper metadata`);
+    
+    const pdfDatabase = await getPdfDatabase();
+    const pdf = pdfDatabase.find(p => p.id === id);
+    if (!pdf) {
+      console.log(`❌ PDF not found: ${id}`);
+      return res.status(404).json({
+        error: {
+          code: 'PDF_NOT_FOUND',
+          message: 'The requested PDF document was not found',
+          details: `No PDF with ID '${id}' exists`
+        }
+      });
+    }
+
+    const epaperMetadata = await loadEpaperMetadata(id);
+    if (!epaperMetadata) {
+      console.log(`❌ Epaper metadata not found: ${id}`);
+      return res.status(404).json({
+        error: {
+          code: 'EPAPER_METADATA_NOT_FOUND',
+          message: 'Epaper metadata not found for this PDF',
+          details: `No epaper metadata available for PDF with ID '${id}'`
+        }
+      });
+    }
+
+    console.log(`✅ Returning epaper metadata for: ${pdf.title}`);
+    res.json(epaperMetadata);
+  } catch (error) {
+    console.error('❌ Error fetching epaper metadata:', error);
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Failed to fetch epaper metadata',
+        details: error.message
+      }
+    });
+  }
+});
+
 // Get PDF thumbnail
 app.get('/api/pdfs/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
     console.log(`🖼️ GET /api/pdfs/${id}/thumbnail - Generating PDF thumbnail`);
     
-    const pdfPath = getPdfFilePath(id);
+    const pdfPath = await getPdfFilePath(id);
     if (!pdfPath) {
       console.log(`❌ PDF not found: ${id}`);
       return res.status(404).json({
@@ -410,28 +543,36 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('🚀 E-Paper API Server started');
   console.log(`📡 Server running on http://localhost:${PORT}`);
   console.log(`📋 API endpoints:`);
-  console.log(`   GET  /health                     - Health check`);
-  console.log(`   GET  /api/pdfs                   - List PDFs`);
-  console.log(`   GET  /api/pdfs/:id/download      - Download PDF`);
-  console.log(`   GET  /api/pdfs/:id/metadata      - Get metadata`);
-  console.log(`   GET  /api/pdfs/:id/thumbnail     - Get thumbnail (PNG)`);
+  console.log(`   GET  /health                        - Health check`);
+  console.log(`   GET  /api/pdfs                      - List PDFs`);
+  console.log(`   GET  /api/pdfs/:id/download         - Download PDF`);
+  console.log(`   GET  /api/pdfs/:id/metadata         - Get metadata`);
+  console.log(`   GET  /api/pdfs/:id/epaper-metadata  - Get epaper metadata`);
+  console.log(`   GET  /api/pdfs/:id/thumbnail        - Get thumbnail (PNG)`);
   console.log('');
   console.log(`📁 PDF directory: ${PDF_DIR}`);
-  console.log(`📊 Available PDFs: ${pdfDatabase.length}`);
   
-  // Check if PDF files exist
-  pdfDatabase.forEach(async (pdf) => {
-    const filePath = getPdfFilePath(pdf.id);
-    if (filePath && await fs.pathExists(filePath)) {
-      console.log(`   ✅ ${pdf.filename} (${pdf.title})`);
-    } else {
-      console.log(`   ❌ ${pdf.filename} (${pdf.title}) - FILE NOT FOUND`);
+  // Load initial PDF database to show available files
+  try {
+    const pdfDatabase = await getPdfDatabase();
+    console.log(`📊 Available PDFs: ${pdfDatabase.length}`);
+    
+    // Check if PDF files exist
+    for (const pdf of pdfDatabase) {
+      const filePath = await getPdfFilePath(pdf.id);
+      if (filePath && await fs.pathExists(filePath)) {
+        console.log(`   ✅ ${pdf.filename} (${pdf.title})`);
+      } else {
+        console.log(`   ❌ ${pdf.filename} (${pdf.title}) - FILE NOT FOUND`);
+      }
     }
-  });
+  } catch (error) {
+    console.error('❌ Error loading initial PDF database:', error);
+  }
 });
 
 // Graceful shutdown

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
 import '../models/pdf_asset.dart';
+import '../models/epaper_metadata.dart';
 import '../config/environment.dart';
 
 class PdfThumbnailCard extends StatefulWidget {
@@ -173,8 +174,22 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          // Title and brand
+                          if (widget.pdfAsset.epaperMetadata != null) ...[
+                            Text(
+                              widget.pdfAsset.epaperMetadata!.brand,
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                          ],
                           Text(
-                            widget.pdfAsset.formattedTitle,
+                            widget.pdfAsset.epaperMetadata?.region ?? widget.pdfAsset.formattedTitle,
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: Colors.grey[800],
@@ -183,11 +198,57 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 4),
+                          // Metadata row
+                          Row(
+                            children: [
+                              if (widget.pdfAsset.epaperMetadata != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
+                                        ? Colors.blue.withValues(alpha: 0.1)
+                                        : Colors.orange.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    widget.pdfAsset.epaperMetadata!.typeDisplayName,
+                                    style: TextStyle(
+                                      color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
+                                          ? Colors.blue[700]
+                                          : Colors.orange[700],
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                              ],
+                              Icon(
+                                Icons.calendar_today,
+                                size: 12,
+                                color: Colors.grey[500],
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  widget.pdfAsset.epaperMetadata?.formattedDate ?? widget.pdfAsset.formattedDate,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
                           Row(
                             children: [
                               Icon(
                                 Icons.description_outlined,
-                                size: 14,
+                                size: 12,
                                 color: Colors.grey[500],
                               ),
                               const SizedBox(width: 4),
@@ -200,7 +261,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                                           : '${widget.pdfAsset.pageCount} pages • ${widget.pdfAsset.formattedFileSize}',
                                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     color: Colors.grey[600],
-                                    fontSize: 11,
+                                    fontSize: 10,
                                   ),
                                 ),
                               ),

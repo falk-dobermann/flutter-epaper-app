@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../config/environment.dart';
 import '../models/pdf_asset.dart';
+import '../models/epaper_metadata.dart';
 
 class PdfService {
   static final PdfService _instance = PdfService._internal();
@@ -112,6 +113,35 @@ class PdfService {
     }
   }
 
+  /// Get epaper metadata for a PDF
+  Future<EpaperMetadata?> getEpaperMetadata(String pdfId) async {
+    try {
+      if (Environment.getConfigValue('enableMockData', false)) {
+        return _getMockEpaperMetadata(pdfId);
+      }
+
+      final response = await _client.get(
+        Uri.parse('${Environment.pdfEndpoint}/$pdfId/epaper-metadata'),
+        headers: Environment.apiHeaders,
+      ).timeout(Environment.connectTimeout);
+
+      if (response.statusCode == 200) {
+        final jsonData = json.decode(response.body);
+        return EpaperMetadata.fromJson(jsonData);
+      } else {
+        if (Environment.enableLogging && kDebugMode) {
+          debugPrint('No epaper metadata found for $pdfId: ${response.statusCode}');
+        }
+        return null;
+      }
+    } catch (e) {
+      if (Environment.enableLogging && kDebugMode) {
+        debugPrint('Error fetching epaper metadata for $pdfId: $e');
+      }
+      return _getMockEpaperMetadata(pdfId);
+    }
+  }
+
   /// Clear PDF cache
   void clearCache() {
     _cache.clear();
@@ -149,6 +179,12 @@ class PdfService {
         fileSize: 2048576, // 2MB
         pageCount: 36,
         tags: ['Köln', 'Rechtsrheinisch', '2025'],
+        epaperMetadata: EpaperMetadata(
+          brand: 'Kölner Stadt-Anzeiger',
+          publishDate: DateTime(2025, 7, 23),
+          region: 'Köln Rechtsrheinisch',
+          type: EpaperType.zeitung,
+        ),
       ),
       PdfAsset(
         id: 'cologne-general',
@@ -159,6 +195,12 @@ class PdfService {
         fileSize: 1843200, // 1.8MB
         pageCount: 36,
         tags: ['Köln', 'Allgemein', '2025'],
+        epaperMetadata: EpaperMetadata(
+          brand: 'Kölner Stadt-Anzeiger',
+          publishDate: DateTime(2025, 7, 20),
+          region: 'Köln Allgemein',
+          type: EpaperType.zeitung,
+        ),
       ),
     ];
   }
@@ -189,6 +231,28 @@ class PdfService {
       'fileSize': 2048576,
       'version': '1.0',
     };
+  }
+
+  /// Mock epaper metadata for development/fallback
+  EpaperMetadata? _getMockEpaperMetadata(String pdfId) {
+    switch (pdfId) {
+      case 'cologne-2025-07-23':
+        return EpaperMetadata(
+          brand: 'Kölner Stadt-Anzeiger',
+          publishDate: DateTime(2025, 7, 23),
+          region: 'Köln Rechtsrheinisch',
+          type: EpaperType.zeitung,
+        );
+      case 'cologne-general':
+        return EpaperMetadata(
+          brand: 'Kölner Stadt-Anzeiger',
+          publishDate: DateTime(2025, 7, 20),
+          region: 'Köln Allgemein',
+          type: EpaperType.zeitung,
+        );
+      default:
+        return null;
+    }
   }
 
   /// Dispose resources

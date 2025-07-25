@@ -1,3 +1,5 @@
+import 'epaper_metadata.dart';
+
 class PdfAsset {
   final String id;
   final String title;
@@ -9,6 +11,7 @@ class PdfAsset {
   final List<String> tags;
   final String? downloadUrl;
   final Map<String, dynamic>? metadata;
+  final EpaperMetadata? epaperMetadata;
 
   const PdfAsset({
     required this.id,
@@ -21,10 +24,16 @@ class PdfAsset {
     required this.tags,
     this.downloadUrl,
     this.metadata,
+    this.epaperMetadata,
   });
 
   // Create PdfAsset from JSON (API response)
   factory PdfAsset.fromJson(Map<String, dynamic> json) {
+    EpaperMetadata? epaperMeta;
+    if (json['epaperMetadata'] != null) {
+      epaperMeta = EpaperMetadata.fromJson(json['epaperMetadata'] as Map<String, dynamic>);
+    }
+
     return PdfAsset(
       id: json['id'] as String,
       title: json['title'] as String,
@@ -36,6 +45,7 @@ class PdfAsset {
       tags: List<String>.from(json['tags'] as List? ?? []),
       downloadUrl: json['downloadUrl'] as String?,
       metadata: json['metadata'] as Map<String, dynamic>?,
+      epaperMetadata: epaperMeta,
     );
   }
 
@@ -122,6 +132,7 @@ class PdfAsset {
     List<String>? tags,
     String? downloadUrl,
     Map<String, dynamic>? metadata,
+    EpaperMetadata? epaperMetadata,
   }) {
     return PdfAsset(
       id: id ?? this.id,
@@ -134,6 +145,7 @@ class PdfAsset {
       tags: tags ?? this.tags,
       downloadUrl: downloadUrl ?? this.downloadUrl,
       metadata: metadata ?? this.metadata,
+      epaperMetadata: epaperMetadata ?? this.epaperMetadata,
     );
   }
 
