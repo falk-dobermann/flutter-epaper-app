@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../widgets/pdf_thumbnail_card.dart';
 import '../models/pdf_asset.dart';
@@ -25,7 +26,6 @@ class _PdfListScreenState extends State<PdfListScreen> {
   DateTime? _endDate;
   String? _selectedRegion;
   EpaperType? _selectedType;
-  bool _showFilters = false;
 
   @override
   void initState() {
@@ -127,13 +127,6 @@ class _PdfListScreenState extends State<PdfListScreen> {
     });
   }
 
-  void _clearDateFilter() {
-    setState(() {
-      _startDate = null;
-      _endDate = null;
-      _applyFilters();
-    });
-  }
 
   bool _hasActiveFilters() {
     // Check if any non-default filters are active
@@ -177,70 +170,6 @@ class _PdfListScreenState extends State<PdfListScreen> {
     return count;
   }
 
-  Widget _buildQuickFilterChips() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 0.5,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.filter_alt,
-                size: 16,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Active Filters:',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _showFilters = true;
-                  });
-                },
-                icon: const Icon(Icons.tune, size: 16),
-                label: const Text('Edit'),
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              // Date range chip
-              if (_startDate != null || _endDate != null) _buildDateRangeChip(),
-              // Region chip
-              if (_selectedRegion != null) _buildRegionChip(),
-              // Type chip
-              if (_selectedType != null) _buildTypeChip(),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildDateRangeChip() {
     String label;
@@ -353,7 +282,7 @@ class _PdfListScreenState extends State<PdfListScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.3),
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
         border: Border(
           bottom: BorderSide(
             color: Theme.of(context).dividerColor,
@@ -421,8 +350,17 @@ class _PdfListScreenState extends State<PdfListScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: const Text('E-Paper PDF Betrachter'),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        title: Center(
+          child: SvgPicture.asset(
+            'assets/siteLogo.svg',
+            height: 32,
+            colorFilter: ColorFilter.mode(
+              Colors.white,
+              BlendMode.srcIn,
+            ),
+          ),
+        ),
         actions: [
           // Filter menu button
           PopupMenuButton<String>(
@@ -717,241 +655,6 @@ class _PdfListScreenState extends State<PdfListScreen> {
     );
   }
 
-  Widget _buildFilterPanel() {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-            width: 1.0,
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.filter_list,
-                size: 20,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Filters',
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Spacer(),
-              TextButton(
-                onPressed: _resetFilters,
-                child: const Text('Reset'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          
-          // Date Range Filter
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Date Range',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _startDate ?? DateTime.now().subtract(const Duration(days: 7)),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime.now().add(const Duration(days: 365)),
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  _startDate = date;
-                                  _applyFilters();
-                                });
-                              }
-                            },
-                            child: Text(
-                              _startDate != null 
-                                ? '${_startDate!.day}.${_startDate!.month}.${_startDate!.year}'
-                                : 'Start Date',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('to'),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () async {
-                              final date = await showDatePicker(
-                                context: context,
-                                initialDate: _endDate ?? DateTime.now(),
-                                firstDate: DateTime(2020),
-                                lastDate: DateTime.now().add(const Duration(days: 365)),
-                              );
-                              if (date != null) {
-                                setState(() {
-                                  _endDate = date;
-                                  _applyFilters();
-                                });
-                              }
-                            },
-                            child: Text(
-                              _endDate != null 
-                                ? '${_endDate!.day}.${_endDate!.month}.${_endDate!.year}'
-                                : 'End Date',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _clearDateFilter,
-                          icon: const Icon(Icons.clear, size: 16),
-                          tooltip: 'Clear date filter',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Region and Type Filters
-          Row(
-            children: [
-              // Region Filter
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Region',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedRegion,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        isDense: true,
-                      ),
-                      hint: const Text('All Regions'),
-                      items: [
-                        const DropdownMenuItem<String>(
-                          value: null,
-                          child: Text('All Regions'),
-                        ),
-                        ..._getAvailableRegions().map((region) => DropdownMenuItem<String>(
-                          value: region,
-                          child: Text(region),
-                        )),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedRegion = value;
-                          _applyFilters();
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(width: 16),
-              
-              // Type Filter
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Type',
-                      style: Theme.of(context).textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<EpaperType>(
-                      value: _selectedType,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        isDense: true,
-                      ),
-                      hint: const Text('All Types'),
-                      items: [
-                        const DropdownMenuItem<EpaperType>(
-                          value: null,
-                          child: Text('All Types'),
-                        ),
-                        ..._getAvailableTypes().map((type) => DropdownMenuItem<EpaperType>(
-                          value: type,
-                          child: Text(type.displayName),
-                        )),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedType = value;
-                          _applyFilters();
-                        });
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Filter Summary
-          if (_filteredPdfAssets.length != _pdfAssets.length)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    size: 16,
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Showing ${_filteredPdfAssets.length} of ${_pdfAssets.length} documents',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 
   @override
   void dispose() {

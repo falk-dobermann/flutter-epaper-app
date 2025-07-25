@@ -2,9 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-import '../models/pdf_asset.dart';
-import '../models/epaper_metadata.dart';
+import '../config/app_theme.dart';
 import '../config/environment.dart';
+import '../models/epaper_metadata.dart';
+import '../models/pdf_asset.dart';
 
 class PdfThumbnailCard extends StatefulWidget {
   final PdfAsset pdfAsset;
@@ -209,7 +210,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                                   ),
                                   decoration: BoxDecoration(
                                     color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
-                                        ? Colors.blue.withValues(alpha: 0.1)
+                                        ? AppTheme.brandColor.withValues(alpha: 0.1)
                                         : Colors.orange.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -217,7 +218,7 @@ class _PdfThumbnailCardState extends State<PdfThumbnailCard> with SingleTickerPr
                                     widget.pdfAsset.epaperMetadata!.typeDisplayName,
                                     style: TextStyle(
                                       color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
-                                          ? Colors.blue[700]
+                                          ? AppTheme.brandColor
                                           : Colors.orange[700],
                                       fontSize: 9,
                                       fontWeight: FontWeight.bold,

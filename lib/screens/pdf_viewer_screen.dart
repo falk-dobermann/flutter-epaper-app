@@ -3,13 +3,17 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'package:pdfrx/pdfrx.dart';
 
-import '../models/pdf_asset.dart';
+import '../config/app_theme.dart';
 import '../models/epaper_metadata.dart';
+import '../models/pdf_asset.dart';
 import '../services/pdf_service.dart';
-import '../widgets/pdf_thumbnail_panel.dart';
 import '../widgets/pdf_outline_panel.dart';
+import '../widgets/pdf_thumbnail_panel.dart';
 
 class PdfViewerScreen extends StatefulWidget {
   final PdfAsset pdfAsset;
@@ -57,7 +61,20 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     // Start with toolbar visible
     _toolbarAnimationController.forward();
     
+    // Initialize German locale for date formatting
+    _initializeDateFormatting();
+    
     _loadPdfDocument();
+  }
+
+  Future<void> _initializeDateFormatting() async {
+    try {
+      await initializeDateFormatting('de_DE', null);
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Failed to initialize German locale, using default: $e');
+      }
+    }
   }
 
   // Custom layout function for horizontal page ordering
@@ -151,84 +168,113 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
                   end: Offset.zero,
                 ).animate(_toolbarAnimation),
                 child: AppBar(
-                  title: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  title: Row(
                     children: [
-                      if (widget.pdfAsset.epaperMetadata != null) ...[
-                        Text(
-                          widget.pdfAsset.epaperMetadata!.brand,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      SvgPicture.asset(
+                        'assets/siteLogo.svg',
+                        height: 28,
+                        colorFilter: ColorFilter.mode(
+                          Colors.white,
+                          BlendMode.srcIn,
                         ),
-                        Row(
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              widget.pdfAsset.epaperMetadata!.region,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.9),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
-                                    ? Colors.blue.withValues(alpha: 0.3)
-                                    : Colors.orange.withValues(alpha: 0.3),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                widget.pdfAsset.epaperMetadata!.typeDisplayName,
-                                style: TextStyle(
+                            if (widget.pdfAsset.epaperMetadata != null) ...[
+                              // Show brand text only if it's not "Kölner Stadt-Anzeiger"
+                              if (widget.pdfAsset.epaperMetadata!.brand != "Kölner Stadt-Anzeiger")
+                                Text(
+                                  widget.pdfAsset.epaperMetadata!.brand,
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              // Date on top line - large format with weekday
+                              Text(
+                                _formatDateWithWeekday(widget.pdfAsset.epaperMetadata!.publishDate),
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                   color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              widget.pdfAsset.epaperMetadata!.formattedDate,
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.9),
+                              // Region and type badge on second line
+                              Row(
+                                children: [
+                                  Text(
+                                    widget.pdfAsset.epaperMetadata!.region,
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: Colors.white.withValues(alpha: 0.9),
+                                    ),
+                                  ),
+                                  // Show type badge only if brand is not "Kölner Stadt-Anzeiger"
+                                  if (widget.pdfAsset.epaperMetadata!.brand != "Kölner Stadt-Anzeiger") ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: widget.pdfAsset.epaperMetadata!.type == EpaperType.zeitung
+                                            ? AppTheme.brandColor.withValues(alpha: 0.3)
+                                            : Colors.orange.withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        widget.pdfAsset.epaperMetadata!.typeDisplayName,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
-                            ),
+                            ] else ...[
+                              Text(
+                                widget.pdfAsset.formattedTitle,
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
-                      ] else ...[
-                        Text(
-                          widget.pdfAsset.formattedTitle,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                      ),
                     ],
                   ),
-                  backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+                  backgroundColor: Theme.of(context).colorScheme.primary,
                   actions: [
                     // Zoom controls
                     IconButton(
                       icon: const Icon(Icons.zoom_out),
                       onPressed: (zoomLevel > minZoom && _isControllerReady) ? _zoomOut : null,
+                      disabledColor: Theme.of(context).appBarTheme.iconTheme?.color?.withValues(alpha: 0.6),
                       tooltip: 'Zoom Out',
                     ),
                     Text(
                       '${(zoomLevel * 100).round()}%',
-                      style: Theme.of(context).textTheme.bodyMedium,
+                      style: Theme.of(context).appBarTheme.titleTextStyle?.copyWith(
+                        color: _isControllerReady 
+                            ? Theme.of(context).appBarTheme.iconTheme?.color 
+                            : Theme.of(context).appBarTheme.iconTheme?.color?.withValues(alpha: 0.6),
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.zoom_in),
                       onPressed: (zoomLevel < maxZoom && _isControllerReady) ? _zoomIn : null,
+                      disabledColor: Theme.of(context).appBarTheme.iconTheme?.color?.withValues(alpha: 0.6),
                       tooltip: 'Zoom In',
                     ),
                     IconButton(
                       icon: const Icon(Icons.zoom_out_map),
                       onPressed: _isControllerReady ? _resetZoom : null,
+                      disabledColor: Theme.of(context).appBarTheme.iconTheme?.color?.withValues(alpha: 0.6),
                       tooltip: 'Reset Zoom',
                     ),
                     const SizedBox(width: 8),
@@ -501,11 +547,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
     });
   }
 
-  void _handleSingleTap() {
-    // Single tap toggles toolbar visibility for fullscreen viewing
-    _toggleToolbarVisibility();
-  }
-
   void _calculateFitToScreenScale() async {
     if (!_isControllerReady || pdfData == null) return;
     
@@ -570,6 +611,28 @@ class _PdfViewerScreenState extends State<PdfViewerScreen>
       setState(() {
         _fitToScreenScale = 1.0;
       });
+    }
+  }
+
+  String _formatDateWithWeekday(DateTime date) {
+    try {
+      final formatter = DateFormat('EEEE, d. MMMM yyyy', 'de_DE');
+      return formatter.format(date);
+    } catch (e) {
+      // Fallback to English format if German locale fails
+      if (kDebugMode) {
+        debugPrint('German date formatting failed, using fallback: $e');
+      }
+      try {
+        final fallbackFormatter = DateFormat('EEEE, MMMM d, yyyy');
+        return fallbackFormatter.format(date);
+      } catch (e2) {
+        // Ultimate fallback to simple format
+        if (kDebugMode) {
+          debugPrint('All date formatting failed, using simple format: $e2');
+        }
+        return '${date.day}.${date.month}.${date.year}';
+      }
     }
   }
 
